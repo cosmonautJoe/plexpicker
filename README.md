@@ -2,7 +2,7 @@
 
 A fast, phone-friendly web app that helps you decide **what to watch next** from your
 own [Plex](https://www.plex.tv/) movie library. It pulls your unwatched films, lets you
-filter by genre, attention level, and runtime, and uses an LLM to pitch the single best
+filter by genre, attention level, and runtime, and pitch the single best
 pick for your taste — then lets you queue it, rate it, and find similar titles.
 
 Built as a single self-contained HTML file with a tiny Python server for the home network.
