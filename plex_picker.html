@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PlexPicker">
+<meta name="theme-color" content="#0f0f11">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.png">
+<title>Plex Picker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f0f11; --bg2: #18181c; --bg3: #222228;
+    --border: rgba(255,255,255,0.08); --border2: rgba(255,255,255,0.14);
+    --text: #f0f0f2; --text2: #9a9aaa; --text3: #5a5a6a;
+    --accent: #e8b84b; --accent-dim: rgba(232,184,75,0.12); --accent-border: rgba(232,184,75,0.3);
+    --danger: #e85c5c; --success: #5ce89a;
+    --radius: 10px; --radius-sm: 6px;
+    --safe-top: env(safe-area-inset-top);
+    --safe-bottom: env(safe-area-inset-bottom);
+  }
+  html, body { height: 100%; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+    /* Prevent iOS bounce */
+    overflow: hidden;
+    height: 100%;
+  }
+
+  /* ---- LAYOUT ---- */
+  .app {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding-top: var(--safe-top);
+    padding-bottom: var(--safe-bottom);
+  }
+
+  header {
+    flex-shrink: 0;
+    padding: 1rem 1.25rem 0.75rem;
+    border-bottom: 0.5px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .logo { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+  .logo span { color: var(--accent); }
+
+  /* Tab bar */
+  .tabs {
+    flex-shrink: 0;
+    display: flex;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .tab {
+    flex: 1;
+    padding: 10px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text3);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.12s;
+    user-select: none;
+  }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* Scrollable content area */
+  .content {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 1.25rem;
+  }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* ---- COMPONENTS ---- */
+  .section-label { font-size: 11px; font-weight: 500; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
+  .filter-block { margin-bottom: 1.25rem; }
+  .pill-row { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pill { padding: 6px 14px; border-radius: 999px; border: 0.5px solid var(--border2); font-size: 13px; cursor: pointer; background: transparent; color: var(--text2); transition: all 0.12s; user-select: none; font-family: inherit; -webkit-tap-highlight-color: transparent; }
+  .pill.active { background: var(--accent-dim); border-color: var(--accent-border); color: var(--accent); }
+  .pill.exclude.active { background: rgba(232,92,92,0.12); border-color: rgba(232,92,92,0.32); color: var(--danger); }
+
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 10px 18px; border-radius: var(--radius-sm); border: 0.5px solid var(--border2); font-size: 14px; font-weight: 500; cursor: pointer; background: transparent; color: var(--text); font-family: inherit; transition: all 0.12s; -webkit-tap-highlight-color: transparent; }
+  .btn:active { opacity: 0.7; }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn.primary { background: var(--accent); color: #1a1400; border-color: var(--accent); font-weight: 600; }
+  .btn.block { width: 100%; margin-bottom: 8px; }
+  .btn.ghost { border-color: transparent; color: var(--text2); }
+
+  .btn-row { display: flex; gap: 8px; margin-bottom: 1.25rem; }
+
+  .filter-summary { font-size: 12px; color: var(--text3); margin-bottom: 1rem; min-height: 18px; }
+
+  .rec-card { background: var(--bg2); border: 0.5px solid var(--border2); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1rem; animation: fadeIn 0.2s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .rec-title { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 4px; }
+  .rec-meta { font-size: 12px; color: var(--text3); margin-bottom: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .rec-meta span::before { content: '·'; margin-right: 8px; }
+  .rec-meta span:first-child::before { content: ''; margin-right: 0; }
+  .rec-pitch { font-size: 14px; color: var(--text2); line-height: 1.7; margin-bottom: 1.25rem; border-left: 2px solid var(--accent-border); padding-left: 12px; }
+  .rec-summary { font-size: 13px; color: var(--text2); line-height: 1.6; margin-bottom: 1rem; }
+  .genre-tags { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 1.25rem; }
+  .tag { font-size: 11px; padding: 2px 8px; border-radius: 4px; background: var(--bg3); color: var(--text3); border: 0.5px solid var(--border); }
+  .attn-tag { font-size: 11px; padding: 2px 8px; border-radius: 4px; border: 0.5px solid; font-weight: 500; }
+  .attn-tag.background { background: rgba(92,232,154,0.08); color: #5ce89a; border-color: rgba(92,232,154,0.2); }
+  .attn-tag.half { background: rgba(232,184,75,0.08); color: #e8b84b; border-color: rgba(232,184,75,0.2); }
+  .attn-tag.full { background: rgba(232,92,92,0.08); color: #e85c5c; border-color: rgba(232,92,92,0.2); }
+
+  .rec-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .rec-actions .btn { font-size: 13px; padding: 9px 12px; }
+
+  .rate-panel { margin-top: 1rem; padding-top: 1rem; border-top: 0.5px solid var(--border); display: none; }
+  .star-row { display: flex; gap: 2px; margin: 8px 0 4px; }
+  .star { font-size: 26px; cursor: pointer; color: var(--text3); line-height: 1; transition: color 0.08s; -webkit-tap-highlight-color: transparent; }
+  .star.lit { color: var(--accent); }
+  .rate-label { font-size: 12px; color: var(--text3); margin-top: 4px; }
+
+  .empty-state { text-align: center; padding: 3rem 1rem; color: var(--text3); font-size: 14px; border: 0.5px dashed var(--border2); border-radius: var(--radius); }
+  .empty-state .big { font-size: 32px; margin-bottom: 8px; }
+
+  .queue-item { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 12px 0; border-bottom: 0.5px solid var(--border); font-size: 14px; }
+  .queue-item:last-child { border-bottom: none; }
+  .queue-num { color: var(--text3); min-width: 20px; font-size: 12px; padding-top: 2px; }
+  .queue-title { flex: 1; }
+  .queue-year { color: var(--text3); font-size: 11px; display: block; margin-top: 1px; }
+  .queue-remove { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 20px; padding: 0 4px; line-height: 1; flex-shrink: 0; -webkit-tap-highlight-color: transparent; }
+
+  .conn-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text3); padding: 4px 10px; border-radius: 999px; border: 0.5px solid var(--border); }
+  .conn-badge.ok { color: var(--success); border-color: rgba(92,232,154,0.25); background: rgba(92,232,154,0.07); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+
+  .token-card { background: var(--bg2); border: 0.5px solid var(--border2); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1.5rem; }
+  .token-row { display: flex; gap: 8px; margin-top: 10px; }
+  .token-input { flex: 1; background: var(--bg3); border: 0.5px solid var(--border2); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 14px; color: var(--text); font-family: inherit; outline: none; }
+  .conn-msg { font-size: 12px; color: var(--text3); margin-top: 8px; min-height: 18px; }
+  .conn-msg.err { color: var(--danger); }
+  .conn-msg.ok { color: var(--success); }
+
+  .spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.15); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.65s linear infinite; flex-shrink: 0; display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---- POSTERS ---- */
+  .rec-poster { width: 100%; aspect-ratio: 2/3; max-height: 320px; border-radius: var(--radius); overflow: hidden; margin-bottom: 1rem; background: var(--bg3); cursor: pointer; }
+  .rec-poster img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+  .lib-search { width: 100%; background: var(--bg2); border: 0.5px solid var(--border2); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 14px; color: var(--text); font-family: inherit; outline: none; margin-bottom: 1rem; -webkit-appearance: none; }
+
+  .poster-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
+  .poster-tile { position: relative; aspect-ratio: 2/3; border-radius: var(--radius-sm); overflow: hidden; background: var(--bg3); cursor: pointer; border: 0.5px solid var(--border); -webkit-tap-highlight-color: transparent; }
+  .poster-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .poster-tile.watched img { opacity: 0.4; }
+  .poster-tile .poster-title-fallback { display: none; position: absolute; inset: 0; align-items: center; justify-content: center; padding: 6px; font-size: 11px; text-align: center; color: var(--text2); }
+  .poster-tile.no-poster .poster-title-fallback { display: flex; }
+  .poster-tile .poster-name { position: absolute; left: 0; right: 0; bottom: 0; padding: 5px 6px 4px; font-size: 10.5px; line-height: 1.25; background: linear-gradient(to top, rgba(0,0,0,0.85), transparent); color: var(--text); }
+  .poster-badge { position: absolute; top: 5px; right: 5px; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 999px; background: rgba(0,0,0,0.6); color: var(--accent); border: 0.5px solid var(--accent-border); }
+  .poster-badge.watched-only { color: var(--success); border-color: rgba(92,232,154,0.3); }
+
+  /* ---- MODAL ---- */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: flex-end; justify-content: center; z-index: 100; }
+  .modal-card { background: var(--bg2); border-top: 0.5px solid var(--border2); border-radius: var(--radius) var(--radius) 0 0; width: 100%; max-width: 480px; max-height: 82vh; overflow-y: auto; padding: 1.25rem; padding-bottom: calc(1.25rem + var(--safe-bottom)); -webkit-overflow-scrolling: touch; }
+  .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; gap: 8px; }
+  .modal-title { font-size: 16px; font-weight: 600; }
+  .modal-close { background: none; border: none; color: var(--text2); font-size: 22px; cursor: pointer; line-height: 1; padding: 0 4px; flex-shrink: 0; -webkit-tap-highlight-color: transparent; }
+  .similar-item { display: flex; gap: 10px; padding: 10px 0; border-bottom: 0.5px solid var(--border); }
+  .similar-item:last-child { border-bottom: none; }
+  .similar-poster { width: 56px; height: 84px; flex-shrink: 0; border-radius: 4px; overflow: hidden; background: var(--bg3); }
+  .similar-poster img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .similar-body { flex: 1; min-width: 0; }
+  .similar-title { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+  .similar-reason { font-size: 12.5px; color: var(--text2); line-height: 1.5; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo">plex<span>picker</span></div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <button id="refresh-btn" class="conn-badge" title="re-pull library from Plex" onclick="refreshLibrary()" style="display:none;cursor:pointer;background:transparent;font-family:inherit;">&#128260;</button>
+      <div id="conn-badge" class="conn-badge"><span class="dot"></span> not connected</div>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('pick')">&#127916; Pick</div>
+    <div class="tab" onclick="switchTab('library')">&#9638; Library</div>
+    <div class="tab" onclick="switchTab('queue')">&#9776; Queue <span id="queue-badge" style="display:none;background:var(--accent);color:#1a1400;border-radius:999px;font-size:10px;padding:1px 6px;margin-left:4px;"></span></div>
+  </div>
+
+  <div class="content">
+
+    <!-- PICK TAB -->
+    <div class="tab-panel active" id="tab-pick">
+      <div id="token-card" class="token-card">
+        <div class="section-label">plex connection</div>
+        <div class="token-row">
+          <input class="token-input" type="password" id="token-input" placeholder="X-Plex-Token" value="" />
+          <button class="btn primary" onclick="connectPlex()">connect</button>
+        </div>
+        <div class="conn-msg" id="conn-msg"></div>
+      </div>
+
+      <div id="main" style="display:none;">
+        <div class="filter-block">
+          <div class="section-label">genre</div>
+          <div class="pill-row" id="genre-pills">
+            <span class="pill" onclick="togglePill(this,'genre')">thriller</span>
+            <span class="pill" onclick="togglePill(this,'genre')">horror</span>
+            <span class="pill" onclick="togglePill(this,'genre')">crime</span>
+            <span class="pill" onclick="togglePill(this,'genre')">comedy</span>
+            <span class="pill" onclick="togglePill(this,'genre')">sci-fi</span>
+            <span class="pill" onclick="togglePill(this,'genre')">drama</span>
+            <span class="pill" onclick="togglePill(this,'genre')">animation</span>
+            <span class="pill" onclick="togglePill(this,'genre')">documentary</span>
+            <span class="pill" onclick="togglePill(this,'genre')">action</span>
+            <span class="pill" onclick="togglePill(this,'genre')">classic</span>
+          </div>
+        </div>
+
+        <div class="filter-block">
+          <div class="section-label">attention level</div>
+          <div class="pill-row" id="attention-pills">
+            <span class="pill" onclick="togglePill(this,'attention')">background</span>
+            <span class="pill" onclick="togglePill(this,'attention')">half</span>
+            <span class="pill" onclick="togglePill(this,'attention')">full focus</span>
+          </div>
+        </div>
+
+        <div class="filter-block">
+          <div class="section-label">length</div>
+          <div class="pill-row" id="length-pills">
+            <span class="pill" onclick="togglePill(this,'length')">short (&lt;105 min)</span>
+            <span class="pill" onclick="togglePill(this,'length')">standard (105–150 min)</span>
+            <span class="pill" onclick="togglePill(this,'length')">epic (150 min+)</span>
+          </div>
+        </div>
+
+        <div class="filter-block">
+          <div class="section-label">exclude</div>
+          <div class="pill-row" id="exclude-pills">
+            <span class="pill exclude" data-ex="animated" onclick="toggleExclude('animated')">animated</span>
+            <span class="pill exclude" data-ex="documentary" onclick="toggleExclude('documentary')">documentary</span>
+          </div>
+        </div>
+
+        <div class="filter-summary" id="filter-summary"></div>
+
+        <div class="btn-row">
+          <button class="btn primary" id="pick-btn" onclick="pickMovie(null)" style="flex:1;">&#9654; pick a movie</button>
+          <button class="btn" id="surprise-btn" onclick="surpriseMe()" title="instant random pick">&#127922;</button>
+          <button class="btn" onclick="clearFilters()">clear</button>
+        </div>
+
+        <div id="rec-area">
+          <div class="empty-state"><div class="big">&#127916;</div>set your filters and hit pick</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LIBRARY TAB -->
+    <div class="tab-panel" id="tab-library">
+      <div class="filter-block">
+        <div class="section-label">status</div>
+        <div class="pill-row" id="lib-status-pills">
+          <span class="pill" onclick="toggleLibPill(this,'status')">unwatched</span>
+          <span class="pill" onclick="toggleLibPill(this,'status')">watched</span>
+        </div>
+      </div>
+
+      <div class="filter-block">
+        <div class="section-label">genre</div>
+        <div class="pill-row" id="lib-genre-pills">
+          <span class="pill" onclick="toggleLibPill(this,'genre')">thriller</span>
+          <span class="pill" onclick="toggleLibPill(this,'genre')">horror</span>
+          <span class="pill" onclick="toggleLibPill(this,'genre')">crime</span>
+          <span class="pill" onclick="toggleLibPill(this,'genre')">comedy</span>
+          <span class="pill" onclick="toggleLibPill(this,'genre')">sci-fi</span>
+          <span class="pill" onclick="toggleLibPill(this,'genre')">drama</span>
+          <span class="pill" onclick="toggleLibPill(this,'genre')">animation</span>
+          <span class="pill" onclick="toggleLibPill(this,'genre')">documentary</span>
+          <span class="pill" onclick="toggleLibPill(this,'genre')">action</span>
+          <span class="pill" onclick="toggleLibPill(this,'genre')">classic</span>
+        </div>
+      </div>
+
+      <div class="filter-block">
+        <div class="section-label">attention level</div>
+        <div class="pill-row" id="lib-attention-pills">
+          <span class="pill" onclick="toggleLibPill(this,'attention')">background</span>
+          <span class="pill" onclick="toggleLibPill(this,'attention')">half</span>
+          <span class="pill" onclick="toggleLibPill(this,'attention')">full focus</span>
+        </div>
+      </div>
+
+      <div class="filter-block">
+        <div class="section-label">exclude</div>
+        <div class="pill-row" id="lib-exclude-pills">
+          <span class="pill exclude" data-ex="animated" onclick="toggleExclude('animated')">animated</span>
+          <span class="pill exclude" data-ex="documentary" onclick="toggleExclude('documentary')">documentary</span>
+        </div>
+      </div>
+
+      <div class="filter-summary" id="lib-filter-summary"></div>
+
+      <div class="btn-row">
+        <input class="lib-search" id="lib-search" type="text" placeholder="search titles..." oninput="renderLibrary()" style="flex:1;margin-bottom:0;">
+        <button class="btn ghost" onclick="clearLibFilters()">clear</button>
+      </div>
+
+      <div class="poster-grid" id="poster-grid">
+        <div class="empty-state"><div class="big">&#9638;</div>connect to plex to see your library</div>
+      </div>
+    </div>
+
+    <!-- QUEUE TAB -->
+    <div class="tab-panel" id="tab-queue">
+      <div id="queue-list-area">
+        <div class="empty-state"><div class="big">&#9776;</div>nothing queued yet</div>
+      </div>
+      <div id="export-wrap" style="display:none;margin-top:1rem;">
+        <button class="btn ghost block" onclick="exportQueue()">&#8998; copy to clipboard</button>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /app -->
+
+<div class="modal-overlay" id="similar-modal" style="display:none;" onclick="if(event.target===this)closeSimilarModal()">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div class="modal-title" id="similar-modal-title">similar movies</div>
+      <button class="modal-close" onclick="closeSimilarModal()">&times;</button>
+    </div>
+    <div id="similar-modal-body"></div>
+  </div>
+</div>
+
+<script>
+const PLEX_URL = 'http://192.168.68.51:32400';
+const TASTE = `Joey's 10/10 films: Seven, Nightcrawler, No Country for Old Men, There Will Be Blood, Fight Club, 12 Angry Men, Alien, Taxi Driver, Gladiator, Full Metal Jacket, Dr. Strangelove, Her, Saving Private Ryan, The Lord of the Rings Fellowship of the Ring, Silence of the Lambs. 9/10: Prisoners, Donnie Darko, Anatomy of a Murder, Witness for the Prosecution. Loves dark methodical thrillers, slow-burn character studies, serial killer procedurals, Kubrick-style precision. Games heavily (WoW, Elden Ring) and sometimes watches in the background.`;
+
+let movies = [], attentionTags = {}, filters = { genre:[], attention:[], length:[] }, libFilters = { status:[], genre:[], attention:[] }, queue = [], currentRec = null, hoverRating = 0, plexToken = '', currentSimilar = [], excludePrefs = { animated:false, documentary:false };
+
+function loadExcludePrefs() {
+  try { const r = JSON.parse(localStorage.getItem('pp_exclude') || 'null'); if (r) excludePrefs = { ...excludePrefs, ...r }; } catch(e) {}
+}
+function saveExcludePrefs() {
+  try { localStorage.setItem('pp_exclude', JSON.stringify(excludePrefs)); } catch(e) {}
+}
+function syncExcludeUI() {
+  document.querySelectorAll('.pill.exclude').forEach(p => p.classList.toggle('active', !!excludePrefs[p.dataset.ex]));
+}
+function toggleExclude(key) {
+  excludePrefs[key] = !excludePrefs[key];
+  saveExcludePrefs();
+  syncExcludeUI();
+  updateFilterSummary();
+  renderLibrary();
+}
+function applyExclusions(pool) {
+  if (excludePrefs.animated) pool = pool.filter(m => !(m.genres.includes('animation') || m.genres.includes('anime')));
+  if (excludePrefs.documentary) pool = pool.filter(m => !m.genres.includes('documentary'));
+  return pool;
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelector(`.tab[onclick="switchTab('${name}')"]`).classList.add('active');
+  document.getElementById('tab-'+name).classList.add('active');
+  if (name === 'library') renderLibrary();
+}
+
+function posterUrl(m) {
+  return m.thumb ? `${PLEX_URL}${m.thumb}?X-Plex-Token=${plexToken}` : '';
+}
+
+const CACHE_KEY = 'pp_library_cache';
+function saveCache() {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ token: plexToken, movies, ts: Date.now() })); } catch(e) {}
+}
+function loadCache() {
+  try { return JSON.parse(localStorage.getItem(CACHE_KEY) || 'null'); } catch(e) { return null; }
+}
+
+function applyConnectedUI(fromCache) {
+  const uw = movies.filter(m => !m.watched).length;
+  const badge = document.getElementById('conn-badge');
+  badge.className = 'conn-badge ok';
+  badge.innerHTML = `<span class="dot"></span> ${uw} unwatched${fromCache?' (cached)':''}`;
+  document.getElementById('token-card').style.display = 'none';
+  document.getElementById('main').style.display = 'block';
+  document.getElementById('refresh-btn').style.display = 'inline-flex';
+  updateFilterSummary();
+  renderLibrary();
+}
+
+async function loadTags() {
+  try {
+    const r = await fetch('plex_tags.json');
+    const data = await r.json();
+    data.forEach(d => { attentionTags[d.title] = d.attention; });
+  } catch(e) { console.warn('plex_tags.json not found'); }
+}
+
+function togglePill(el, group) {
+  if (group === 'genre') {
+    el.classList.toggle('active');
+  } else {
+    const wasActive = el.classList.contains('active');
+    document.querySelectorAll(`#${group}-pills .pill`).forEach(p => p.classList.remove('active'));
+    if (!wasActive) el.classList.add('active');
+  }
+  filters[group] = [...document.querySelectorAll(`#${group}-pills .pill.active`)].map(p => p.textContent.trim());
+  updateFilterSummary();
+}
+
+function clearFilters() {
+  document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+  filters = { genre:[], attention:[], length:[] };
+  currentRec = null;
+  document.getElementById('rec-area').innerHTML = '<div class="empty-state"><div class="big">&#127916;</div>set your filters and hit pick</div>';
+  updateFilterSummary();
+}
+
+function updateFilterSummary() {
+  const pool = applyFilters();
+  const total = movies.filter(m=>!m.watched).length;
+  const el = document.getElementById('filter-summary');
+  const anyExclude = excludePrefs.animated || excludePrefs.documentary;
+  const hasFilters = filters.genre.length || filters.attention.length || filters.length.length || anyExclude;
+  el.textContent = hasFilters ? `${pool.length} of ${total} unwatched movies match` : `${total} unwatched movies`;
+}
+
+async function connectPlex() {
+  const token = document.getElementById('token-input').value.trim();
+  if (!token) return;
+  const msg = document.getElementById('conn-msg');
+  msg.className = 'conn-msg';
+  msg.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px;"><span class="spinner"></span> connecting...</span>';
+  try {
+    const r = await fetch(`${PLEX_URL}/library/sections`, { headers: { 'X-Plex-Token': token, 'Accept': 'application/json' } });
+    if (!r.ok) throw new Error();
+    const data = await r.json();
+    const libs = (data.MediaContainer.Directory || []).filter(l => l.type === 'movie');
+    if (!libs.length) { msg.textContent = 'no movie libraries found'; msg.className='conn-msg err'; return; }
+    plexToken = token;
+    msg.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px;"><span class="spinner"></span> loading movies...</span>';
+    movies = [];
+    for (const lib of libs) {
+      const r2 = await fetch(`${PLEX_URL}/library/sections/${lib.key}/all`, { headers: { 'X-Plex-Token': token, 'Accept': 'application/json' } });
+      const d2 = await r2.json();
+      (d2.MediaContainer.Metadata || []).forEach(v => movies.push({
+        title: v.title, year: v.year || '', section: lib.title,
+        rating: v.userRating || null, watched: (v.viewCount || 0) > 0,
+        duration: v.duration ? Math.round(v.duration / 60000) : null,
+        genres: (v.Genre || []).map(g => g.tag.toLowerCase()), summary: v.summary || '',
+        ratingKey: v.ratingKey, thumb: v.thumb || ''
+      }));
+    }
+    await loadTags();
+    msg.className = 'conn-msg ok';
+    msg.textContent = `${movies.length} movies loaded — ${movies.filter(m=>!m.watched).length} unwatched`;
+    applyConnectedUI(false);
+    saveCache();
+  } catch(e) {
+    msg.className = 'conn-msg err';
+    msg.textContent = 'connection failed — is Plex running on this network?';
+  }
+}
+
+function filterByGenreAttention(pool, f) {
+  if (f.attention.length) {
+    const sel = f.attention[0];
+    const key = sel === 'full focus' ? 'full' : sel;
+    pool = pool.filter(m => { const t = attentionTags[m.title]; return !t || t === key; });
+  }
+  if (f.genre.length) {
+    const map = { 'sci-fi':['science fiction','sci-fi'], 'animation':['animation','anime'] };
+    pool = pool.filter(m => f.genre.some(g => {
+      if (g === 'classic') return m.year && parseInt(m.year) < 1975;
+      return (map[g]||[g]).some(x => m.genres.includes(x));
+    }));
+  }
+  return pool;
+}
+
+function applyFilters() {
+  let pool = filterByGenreAttention(applyExclusions(movies.filter(m => !m.watched)), filters);
+  if (filters.length.length) {
+    const s = filters.length[0];
+    pool = pool.filter(m => {
+      if (!m.duration) return true;
+      if (s.includes('105 min')) return m.duration < 105;
+      if (s.includes('105–150')) return m.duration >= 105 && m.duration <= 150;
+      if (s.includes('150 min')) return m.duration > 150;
+      return true;
+    });
+  }
+  return pool;
+}
+
+function matchMovieTitle(title, pool) {
+  return pool.find(m=>m.title.toLowerCase()===title.toLowerCase())
+    || pool.find(m=>m.title.toLowerCase().includes(title.toLowerCase().split(':')[0].trim()));
+}
+
+async function pickMovie(exclude) {
+  const btn = document.getElementById('pick-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> thinking...';
+  let pool = applyFilters();
+  if (exclude) pool = pool.filter(m => m.title !== exclude);
+  if (!pool.length) {
+    document.getElementById('rec-area').innerHTML = '<div class="empty-state"><div class="big">&#128269;</div>no movies match these filters</div>';
+    btn.disabled = false; btn.innerHTML = '&#9654; pick a movie'; return;
+  }
+  const sample = [...pool].sort(() => Math.random()-0.5).slice(0, 20);
+  const prompt = `You are a movie recommendation engine.\n\nProfile: ${TASTE}\n\n${filters.attention[0]?'Attention: '+filters.attention[0]+'.':''} ${filters.genre.length?'Genre: '+filters.genre.join(', ')+'.':''}\n\nPick the SINGLE best match from this list. Write a 2-3 sentence pitch referencing their known favorites by name. Be direct.\n\nMovies: ${sample.map(m=>`${m.title} (${m.year}, ${m.duration||'?'}min, ${m.genres.slice(0,3).join('/')||'unknown'}, ${attentionTags[m.title]||'?'})`).join('; ')}\n\nJSON only: {"title":"...","year":"...","pitch":"...","genres":["..."]}`;
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:400, messages:[{role:'user',content:prompt}] })
+    });
+    const data = await r.json();
+    const text = (data.content||[]).find(c=>c.type==='text')?.text||'';
+    const rec = JSON.parse(text.replace(/```json|```/g,'').trim());
+    const match = matchMovieTitle(rec.title, pool) || sample[0];
+    currentRec = { ...match, pitch: rec.pitch };
+  } catch(e) {
+    currentRec = { ...sample[0], pitch: 'A strong pick based on your filters.' };
+  }
+  renderRec();
+  btn.disabled = false; btn.innerHTML = '&#9654; pick a movie';
+}
+
+function spinAgain() { if (currentRec) pickMovie(currentRec.title); }
+
+function surpriseMe() {
+  const pool = applyFilters();
+  if (!pool.length) {
+    document.getElementById('rec-area').innerHTML = '<div class="empty-state"><div class="big">&#127922;</div>no movies match these filters</div>';
+    return;
+  }
+  const m = pool[Math.floor(Math.random() * pool.length)];
+  currentRec = { ...m, pitch: 'A random pick from your filtered shelf &mdash; no overthinking, just hit play.' };
+  renderRec();
+}
+
+async function refreshLibrary() {
+  if (!plexToken && !document.getElementById('token-input').value.trim()) return;
+  const badge = document.getElementById('conn-badge');
+  if (badge) badge.innerHTML = '<span class="dot"></span> refreshing&hellip;';
+  await connectPlex();
+}
+
+function renderRec() {
+  if (!currentRec) return;
+  const m = currentRec;
+  const dur = m.duration ? `${Math.floor(m.duration/60)}h ${m.duration%60}m` : '';
+  const inQ = queue.some(q=>q.title===m.title);
+  const attnTag = attentionTags[m.title];
+  const attnLabel = attnTag === 'full' ? 'full focus' : attnTag;
+  hoverRating = 0;
+  const posterSrc = posterUrl(m);
+  document.getElementById('rec-area').innerHTML = `
+    <div class="rec-card">
+      ${posterSrc?`<div class="rec-poster" onclick="showSimilarByKey(${m.ratingKey})"><img src="${posterSrc}" loading="lazy"></div>`:''}
+      <div class="rec-title">${m.title}</div>
+      <div class="rec-meta">
+        <span>${m.year}</span>
+        ${dur?`<span>${dur}</span>`:''}
+        ${m.section?`<span>${m.section}</span>`:''}
+      </div>
+      <div class="genre-tags">
+        ${(m.genres||[]).slice(0,4).map(g=>`<span class="tag">${g}</span>`).join('')}
+        ${attnTag?`<span class="attn-tag ${attnTag==='full'?'full':attnTag}">${attnLabel}</span>`:''}
+      </div>
+      ${m.summary?`<div class="rec-summary">${m.summary}</div>`:''}
+      <div class="rec-pitch">${m.pitch}</div>
+      <div class="rec-actions">
+        <button class="btn" onclick="spinAgain()">&#8635; spin again</button>
+        <button class="btn" onclick="moreLikeThis()">&#8853; more like this</button>
+        <button class="btn" onclick="toggleQueue()">${inQ?'&#10003; in queue':'+ queue'}</button>
+        <button class="btn" onclick="showRate()">&#9733; mark watched</button>
+      </div>
+      <div class="rate-panel" id="rate-panel">
+        <div class="section-label">rate it</div>
+        <div class="star-row">
+          ${[1,2,3,4,5,6,7,8,9,10].map(n=>`<span class="star" onclick="submitRating(${n})" onmouseover="hoverStar(${n})" onmouseout="unhoverStar()">&#9733;</span>`).join('')}
+        </div>
+        <div class="rate-label" id="rate-label">tap a star to rate</div>
+      </div>
+    </div>`;
+}
+
+function showRate() { const p=document.getElementById('rate-panel'); if(p) p.style.display='block'; }
+function hoverStar(n) { document.querySelectorAll('.star').forEach((s,i)=>s.classList.toggle('lit',i<n)); document.getElementById('rate-label').textContent=n+'/10'; }
+function unhoverStar() { document.querySelectorAll('.star').forEach((s,i)=>s.classList.toggle('lit',i<hoverRating)); document.getElementById('rate-label').textContent=hoverRating?hoverRating+'/10 — saved':'tap a star to rate'; }
+function submitRating(n) {
+  hoverRating=n;
+  const m=movies.find(mv=>mv.title===currentRec?.title);
+  if(m){m.watched=true;m.rating=n;}
+  if (currentRec?.ratingKey) rateAndScrobble(currentRec.ratingKey, n);
+  removeFromQueue(currentRec?.title);
+  document.getElementById('rate-label').textContent=`${n}/10 — marked as watched`;
+  document.querySelectorAll('.star').forEach((s,i)=>s.classList.toggle('lit',i<n));
+  document.getElementById('conn-badge').innerHTML=`<span class="dot"></span> ${movies.filter(m=>!m.watched).length} unwatched`;
+  updateFilterSummary();
+  saveCache();
+}
+
+async function rateAndScrobble(ratingKey, rating) {
+  const opts = { headers: { 'X-Plex-Token': plexToken } };
+  try {
+    await fetch(`${PLEX_URL}/:/rate?key=${ratingKey}&identifier=com.plexapp.plugins.library&rating=${rating}`, { method:'PUT', ...opts });
+    await fetch(`${PLEX_URL}/:/scrobble?key=${ratingKey}&identifier=com.plexapp.plugins.library`, opts);
+  } catch(e) { console.warn('failed to sync rating to Plex', e); }
+}
+function toggleQueue() {
+  if(!currentRec) return;
+  const idx=queue.findIndex(q=>q.title===currentRec.title);
+  if(idx>=0) queue.splice(idx,1); else queue.push({...currentRec});
+  renderRec(); renderQueue();
+}
+function removeFromQueue(title) { queue=queue.filter(q=>q.title!==title); renderQueue(); }
+function removeFromQueueByIndex(i) { queue.splice(i,1); renderQueue(); }
+function moreLikeThis() {
+  if(!currentRec?.genres?.length){spinAgain();return;}
+  const g=currentRec.genres[0];
+  const pill=[...document.querySelectorAll('#genre-pills .pill')].find(p=>p.textContent.trim()===g);
+  if(pill&&!pill.classList.contains('active')){pill.classList.add('active');filters.genre.push(g);}
+  pickMovie(currentRec.title);
+}
+function saveQueue() {
+  try { localStorage.setItem('pp_queue', JSON.stringify(queue)); } catch(e) {}
+}
+function loadQueueFromStorage() {
+  try { const raw = localStorage.getItem('pp_queue'); queue = raw ? JSON.parse(raw) : []; } catch(e) { queue = []; }
+}
+
+function renderQueue() {
+  saveQueue();
+  const area=document.getElementById('queue-list-area');
+  const exp=document.getElementById('export-wrap');
+  const badge=document.getElementById('queue-badge');
+  if(!queue.length){
+    area.innerHTML='<div class="empty-state"><div class="big">&#9776;</div>nothing queued yet</div>';
+    exp.style.display='none'; badge.style.display='none'; return;
+  }
+  badge.style.display='inline'; badge.textContent=queue.length;
+  exp.style.display='block';
+  area.innerHTML=queue.map((m,i)=>`
+    <div class="queue-item">
+      <span class="queue-num">${i+1}</span>
+      <div class="queue-title">${m.title}<span class="queue-year">${m.year}${attentionTags[m.title]?' · '+( attentionTags[m.title]==='full'?'full focus':attentionTags[m.title]):''}</span></div>
+      <button class="queue-remove" onclick="removeFromQueueByIndex(${i})">&#215;</button>
+    </div>`).join('');
+}
+function exportQueue() {
+  const text=queue.map((m,i)=>`${i+1}. ${m.title} (${m.year})`).join('\n');
+  navigator.clipboard.writeText(text).then(()=>{
+    const b=document.querySelector('#export-wrap .btn');
+    b.textContent='copied!'; setTimeout(()=>b.innerHTML='&#8998; copy to clipboard',1500);
+  });
+}
+function toggleLibPill(el, group) {
+  if (group === 'genre') {
+    el.classList.toggle('active');
+  } else {
+    const wasActive = el.classList.contains('active');
+    document.querySelectorAll(`#lib-${group}-pills .pill`).forEach(p => p.classList.remove('active'));
+    if (!wasActive) el.classList.add('active');
+  }
+  libFilters[group] = [...document.querySelectorAll(`#lib-${group}-pills .pill.active`)].map(p => p.textContent.trim());
+  renderLibrary();
+}
+
+function clearLibFilters() {
+  document.querySelectorAll('#tab-library .pill').forEach(p => p.classList.remove('active'));
+  libFilters = { status:[], genre:[], attention:[] };
+  document.getElementById('lib-search').value = '';
+  renderLibrary();
+}
+
+function libraryPool() {
+  let pool = movies;
+  if (libFilters.status[0] === 'watched') pool = pool.filter(m=>m.watched);
+  else if (libFilters.status[0] === 'unwatched') pool = pool.filter(m=>!m.watched);
+  return applyExclusions(filterByGenreAttention(pool, libFilters));
+}
+
+function renderLibrary() {
+  const grid = document.getElementById('poster-grid');
+  if (!grid) return;
+  if (!movies.length) { grid.innerHTML = '<div class="empty-state"><div class="big">&#9638;</div>connect to plex to see your library</div>'; return; }
+  const q = (document.getElementById('lib-search')?.value || '').toLowerCase().trim();
+  let list = libraryPool();
+  if (q) list = list.filter(m => m.title.toLowerCase().includes(q));
+  const summary = document.getElementById('lib-filter-summary');
+  if (summary) {
+    const hasFilters = libFilters.status.length || libFilters.genre.length || libFilters.attention.length || q || excludePrefs.animated || excludePrefs.documentary;
+    summary.textContent = hasFilters ? `${list.length} of ${movies.length} movies match` : `${movies.length} movies`;
+  }
+  list = [...list].sort((a,b) => a.title.localeCompare(b.title));
+  if (!list.length) { grid.innerHTML = '<div class="empty-state"><div class="big">&#128269;</div>no movies match</div>'; return; }
+  grid.innerHTML = list.map(m => {
+    const url = posterUrl(m);
+    const badge = m.watched ? (m.rating ? `<span class="poster-badge">&#9733; ${m.rating}</span>` : `<span class="poster-badge watched-only">&#10003;</span>`) : '';
+    const cls = `poster-tile ${m.watched?'watched':''} ${url?'':'no-poster'}`.trim();
+    return `
+      <div class="${cls}" onclick="showSimilarByKey(${m.ratingKey})">
+        ${url?`<img src="${url}" loading="lazy" onerror="this.remove();this.closest('.poster-tile').classList.add('no-poster')">`:''}
+        <div class="poster-title-fallback">${m.title}</div>
+        ${badge}
+        <div class="poster-name">${m.title}</div>
+      </div>`;
+  }).join('');
+}
+
+function showSimilarByKey(ratingKey) {
+  const m = movies.find(mv => mv.ratingKey === ratingKey);
+  if (m) findSimilar(m);
+}
+
+async function findSimilar(movie) {
+  const modal = document.getElementById('similar-modal');
+  const body = document.getElementById('similar-modal-body');
+  document.getElementById('similar-modal-title').textContent = `similar to ${movie.title}`;
+  modal.style.display = 'flex';
+  body.innerHTML = '<div class="empty-state"><span class="spinner"></span> finding similar movies...</div>';
+  const pool = applyExclusions(movies.filter(m => !m.watched && m.ratingKey !== movie.ratingKey));
+  if (!pool.length) { body.innerHTML = '<div class="empty-state">no unwatched movies in library</div>'; return; }
+  const sample = [...pool].sort(() => Math.random()-0.5).slice(0, 30);
+  const prompt = `You are a movie recommendation engine.\n\nProfile: ${TASTE}\n\nThe user just tapped on "${movie.title}" (${movie.year}, genres: ${(movie.genres||[]).slice(0,4).join('/')||'unknown'}).${movie.summary?' Summary: '+movie.summary.slice(0,300):''}\n\nFrom the unwatched list below, pick the 4 best matches that are most similar to "${movie.title}" in tone, genre, or style. For each, write a 1-sentence reason referencing what makes it similar.\n\nUnwatched movies: ${sample.map(m=>`${m.title} (${m.year}, ${m.genres.slice(0,3).join('/')||'unknown'})`).join('; ')}\n\nJSON array only, no other text: [{"title":"...","reason":"..."}]`;
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:500, messages:[{role:'user',content:prompt}] })
+    });
+    const data = await r.json();
+    const text = (data.content||[]).find(c=>c.type==='text')?.text||'';
+    const list = JSON.parse(text.replace(/```json|```/g,'').trim());
+    const matched = list.map(item => {
+      const mv = matchMovieTitle(item.title, pool);
+      return mv ? { ...mv, reason: item.reason } : null;
+    }).filter(Boolean);
+    renderSimilarResults(matched);
+  } catch(e) {
+    body.innerHTML = '<div class="empty-state">couldn\'t reach the recommendation engine</div>';
+  }
+}
+
+function renderSimilarResults(list) {
+  currentSimilar = list;
+  const body = document.getElementById('similar-modal-body');
+  if (!list.length) { body.innerHTML = '<div class="empty-state">no matches found</div>'; return; }
+  body.innerHTML = list.map(m => {
+    const url = posterUrl(m);
+    const inQ = queue.some(q=>q.title===m.title);
+    return `
+      <div class="similar-item">
+        <div class="similar-poster">${url?`<img src="${url}" loading="lazy">`:''}</div>
+        <div class="similar-body">
+          <div class="similar-title">${m.title} <span style="color:var(--text3);font-weight:400;">${m.year}</span></div>
+          <div class="similar-reason">${m.reason}</div>
+          <button class="btn" style="font-size:12px;padding:6px 10px;" onclick="queueFromSimilar(${m.ratingKey})">${inQ?'&#10003; in queue':'+ queue'}</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function queueFromSimilar(ratingKey) {
+  const m = currentSimilar.find(mv => mv.ratingKey === ratingKey);
+  if (!m) return;
+  const idx = queue.findIndex(q=>q.title===m.title);
+  if (idx>=0) queue.splice(idx,1); else queue.push({ title:m.title, year:m.year, genres:m.genres, duration:m.duration, section:m.section, pitch:m.reason||'' });
+  renderQueue();
+  renderSimilarResults(currentSimilar);
+}
+
+function closeSimilarModal() { document.getElementById('similar-modal').style.display = 'none'; }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSimilarModal(); });
+
+window.addEventListener('load',()=>{
+  loadQueueFromStorage();
+  renderQueue();
+  loadExcludePrefs();
+  syncExcludeUI();
+  const t = document.getElementById('token-input').value.trim();
+  if (!t) return;
+  const cache = loadCache();
+  if (cache && cache.token === t && cache.movies?.length) {
+    movies = cache.movies;
+    plexToken = t;
+    applyConnectedUI(true);
+  }
+  connectPlex();
+});
+</script>
+</body>
+</html>

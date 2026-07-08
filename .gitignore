@@ -1,0 +1,14 @@
+# Local Claude Code / tooling config
+.claude/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# OS junk
+Thumbs.db
+desktop.ini
+.DS_Store
