@@ -150,12 +150,24 @@
   .conn-msg.err { color: var(--danger); }
   .conn-msg.ok { color: var(--success); }
 
+  .token-or { display: flex; align-items: center; gap: 10px; text-align: center; font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.06em; margin: 12px 0; }
+  .token-or::before, .token-or::after { content: ''; flex: 1; height: 0.5px; background: var(--border); }
+  .token-help { margin-top: 14px; font-size: 12.5px; color: var(--text2); }
+  .token-help summary { cursor: pointer; color: var(--text3); font-size: 12px; user-select: none; -webkit-tap-highlight-color: transparent; list-style: none; }
+  .token-help summary::-webkit-details-marker { display: none; }
+  .token-help summary::before { content: '\25B8'; display: inline-block; margin-right: 6px; transition: transform 0.15s; }
+  .token-help[open] summary::before { transform: rotate(90deg); }
+  .token-help summary:hover { color: var(--text2); }
+  .token-help ol { margin: 10px 0 2px; padding-left: 20px; line-height: 1.75; }
+  .token-help a { color: var(--accent); }
+  .token-help code { background: var(--bg3); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+
   .spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.15); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.65s linear infinite; flex-shrink: 0; display: inline-block; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
   /* ---- POSTERS ---- */
-  .rec-poster { width: 100%; aspect-ratio: 2/3; max-height: 320px; border-radius: var(--radius); overflow: hidden; margin-bottom: 1rem; background: var(--bg3); cursor: pointer; }
-  .rec-poster img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .rec-poster { width: 100%; max-width: 220px; border-radius: var(--radius); overflow: hidden; margin: 0 auto 1rem; background: var(--bg3); cursor: pointer; }
+  .rec-poster img { width: 100%; height: auto; display: block; }
 
   .lib-search { width: 100%; background: var(--bg2); border: 0.5px solid var(--border2); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 14px; color: var(--text); font-family: inherit; outline: none; margin-bottom: 1rem; -webkit-appearance: none; }
 
@@ -206,11 +218,22 @@
     <div class="tab-panel active" id="tab-pick">
       <div id="token-card" class="token-card">
         <div class="section-label">plex connection</div>
+        <button class="btn primary block" id="signin-btn" onclick="plexSignIn()">&#128273; sign in with Plex</button>
+        <div class="token-or">or paste a token</div>
         <div class="token-row">
           <input class="token-input" type="password" id="token-input" placeholder="X-Plex-Token" value="" />
-          <button class="btn primary" onclick="connectPlex()">connect</button>
+          <button class="btn" onclick="connectPlex()">connect</button>
         </div>
         <div class="conn-msg" id="conn-msg"></div>
+        <details class="token-help">
+          <summary>How do I find my token manually?</summary>
+          <ol>
+            <li>Sign in to Plex in a browser at <a href="https://app.plex.tv" target="_blank" rel="noopener">app.plex.tv</a>.</li>
+            <li>Open any movie, click the <strong>&#8942;</strong> menu, and choose <strong>Get Info</strong>.</li>
+            <li>Click <strong>View XML</strong> at the bottom-left of the info window.</li>
+            <li>In the URL that opens, copy everything after <code>X-Plex-Token=</code> and paste it above.</li>
+          </ol>
+        </details>
       </div>
 
       <div id="main" style="display:none;">
@@ -443,6 +466,63 @@ function updateFilterSummary() {
   const anyExclude = excludePrefs.animated || excludePrefs.documentary;
   const hasFilters = filters.genre.length || filters.attention.length || filters.length.length || anyExclude;
   el.textContent = hasFilters ? `${pool.length} of ${total} unwatched movies match` : `${total} unwatched movies`;
+}
+
+function getClientId() {
+  let id = localStorage.getItem('pp_client_id');
+  if (!id) { id = 'plexpicker-' + Math.random().toString(36).slice(2) + '-' + Date.now().toString(36); localStorage.setItem('pp_client_id', id); }
+  return id;
+}
+
+let signInPoll = null;
+async function plexSignIn() {
+  const btn = document.getElementById('signin-btn');
+  const msg = document.getElementById('conn-msg');
+  const clientId = getClientId();
+  const headers = { 'Accept': 'application/json', 'X-Plex-Product': 'PlexPicker', 'X-Plex-Client-Identifier': clientId };
+  // Open the popup synchronously (inside the click) so browsers don't block it.
+  const win = window.open('', 'plexAuth', 'width=620,height=720');
+  btn.disabled = true;
+  msg.className = 'conn-msg';
+  msg.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px;"><span class="spinner"></span> opening Plex sign-in&hellip;</span>';
+  clearInterval(signInPoll);
+  try {
+    const pinRes = await fetch('https://plex.tv/api/v2/pins?strong=true', { method: 'POST', headers });
+    if (!pinRes.ok) throw new Error('pin');
+    const pin = await pinRes.json();
+    const authUrl = 'https://app.plex.tv/auth#?' +
+      'clientID=' + encodeURIComponent(clientId) +
+      '&code=' + encodeURIComponent(pin.code) +
+      '&context%5Bdevice%5D%5Bproduct%5D=' + encodeURIComponent('PlexPicker');
+    if (win) win.location = authUrl; else window.open(authUrl, '_blank');
+    msg.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px;"><span class="spinner"></span> waiting for you to sign in&hellip;</span>';
+    let tries = 0;
+    signInPoll = setInterval(async () => {
+      tries++;
+      try {
+        const r = await fetch('https://plex.tv/api/v2/pins/' + pin.id, { headers });
+        const d = await r.json();
+        if (d.authToken) {
+          clearInterval(signInPoll);
+          if (win && !win.closed) win.close();
+          document.getElementById('token-input').value = d.authToken;
+          btn.disabled = false;
+          connectPlex();
+        }
+      } catch(e) { /* keep polling */ }
+      if (tries > 90) {
+        clearInterval(signInPoll);
+        btn.disabled = false;
+        msg.className = 'conn-msg err';
+        msg.textContent = 'sign-in timed out — try again, or paste a token manually';
+      }
+    }, 2000);
+  } catch(e) {
+    if (win && !win.closed) win.close();
+    btn.disabled = false;
+    msg.className = 'conn-msg err';
+    msg.textContent = "couldn't reach Plex sign-in — paste your token manually instead";
+  }
 }
 
 async function connectPlex() {
