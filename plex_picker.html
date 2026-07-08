@@ -194,6 +194,21 @@
   .similar-body { flex: 1; min-width: 0; }
   .similar-title { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
   .similar-reason { font-size: 12.5px; color: var(--text2); line-height: 1.5; margin-bottom: 8px; }
+
+  /* ---- WALKTHROUGH TOUR ---- */
+  .tour-backdrop { position: fixed; inset: 0; z-index: 200; transition: background 0.2s; }
+  .tour-highlight { position: fixed; z-index: 201; border-radius: 8px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.72), 0 0 0 2px var(--accent); pointer-events: none; transition: top 0.25s, left 0.25s, width 0.25s, height 0.25s; }
+  .tour-card { position: fixed; z-index: 202; background: var(--bg2); border: 0.5px solid var(--border2); border-radius: var(--radius); padding: 1.1rem 1.15rem; width: min(300px, calc(100vw - 32px)); box-shadow: 0 14px 44px rgba(0,0,0,0.55); }
+  .tour-card h4 { font-size: 15px; font-weight: 600; margin-bottom: 6px; letter-spacing: -0.01em; }
+  .tour-card p { font-size: 13px; color: var(--text2); line-height: 1.65; margin-bottom: 14px; }
+  .tour-card p strong { color: var(--text); font-weight: 600; }
+  .tour-nav { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .tour-dots { display: flex; gap: 5px; }
+  .tour-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text3); opacity: 0.4; transition: all 0.15s; }
+  .tour-dot.active { opacity: 1; background: var(--accent); transform: scale(1.15); }
+  .tour-skip { background: none; border: none; color: var(--text3); font-size: 12px; cursor: pointer; font-family: inherit; padding: 4px; -webkit-tap-highlight-color: transparent; }
+  .tour-skip:hover { color: var(--text2); }
+  .tour-go { padding: 7px 15px; font-size: 13px; }
 </style>
 </head>
 <body>
@@ -201,6 +216,7 @@
   <header>
     <div class="logo">plex<span>picker</span></div>
     <div style="display:flex;align-items:center;gap:8px;">
+      <button id="tour-btn" class="conn-badge" title="show walkthrough" onclick="startTour(true)" style="cursor:pointer;background:transparent;font-family:inherit;">?</button>
       <button id="refresh-btn" class="conn-badge" title="re-pull library from Plex" onclick="refreshLibrary()" style="display:none;cursor:pointer;background:transparent;font-family:inherit;">&#128260;</button>
       <div id="conn-badge" class="conn-badge"><span class="dot"></span> not connected</div>
     </div>
@@ -875,11 +891,90 @@ function queueFromSimilar(ratingKey) {
 function closeSimilarModal() { document.getElementById('similar-modal').style.display = 'none'; }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSimilarModal(); });
 
+const TOUR_KEY = 'pp_tour_done_v1';
+function startTour(force) {
+  if (!force && localStorage.getItem(TOUR_KEY)) return;
+  if (document.querySelector('.tour-backdrop')) return; // already open
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isAndroid = /Android/.test(navigator.userAgent);
+  let phoneBody;
+  if (isIOS) {
+    phoneBody = "You're already on your iPhone! Tap the <strong>Share</strong> button in Safari, then <strong>Add to Home Screen</strong>. PlexPicker then opens full-screen like a real app.";
+  } else if (isAndroid) {
+    phoneBody = "You're on Android. Tap the <strong>&#8942; menu</strong> in Chrome, then <strong>Add to Home screen</strong> (or <strong>Install app</strong>). It opens full-screen like a native app.";
+  } else {
+    phoneBody = "On your phone, open this same page over WiFi, then add it to your home screen &mdash; <strong>iPhone:</strong> Share &rarr; Add to Home Screen. <strong>Android:</strong> Chrome &#8942; &rarr; Add to Home screen. It launches full-screen like a real app.";
+  }
+  const steps = [
+    { sel: ".tab[onclick=\"switchTab('pick')\"]", title: "🎬 Pick", body: "Start here. Set your mood with the <strong>genre</strong>, <strong>attention level</strong> and <strong>length</strong> filters, then hit <strong>pick a movie</strong> for a recommendation matched to your taste — or <strong>🎲 surprise me</strong> for an instant random one." },
+    { sel: ".tab[onclick=\"switchTab('library')\"]", title: "Your Library", body: "Browse your whole Plex collection as a poster wall. Search titles, filter by genre or watched status, and tap any poster to find <strong>similar movies</strong> you haven't seen." },
+    { sel: ".tab[onclick=\"switchTab('queue')\"]", title: "Queue", body: "Anything you add lands here as a watchlist for later. You can reorder, remove, and copy the whole list to your clipboard." },
+    { sel: null, title: "📱 Add it to your phone", body: phoneBody },
+  ];
+  let i = 0;
+  const backdrop = document.createElement('div'); backdrop.className = 'tour-backdrop';
+  const hl = document.createElement('div'); hl.className = 'tour-highlight';
+  const card = document.createElement('div'); card.className = 'tour-card';
+  function end() {
+    [backdrop, hl, card].forEach(e => e.remove());
+    window.removeEventListener('resize', render);
+    localStorage.setItem(TOUR_KEY, '1');
+  }
+  function next() { if (i >= steps.length - 1) end(); else { i++; render(); } }
+  function place(target) {
+    card.style.visibility = 'hidden';
+    requestAnimationFrame(() => {
+      const cw = card.offsetWidth, ch = card.offsetHeight;
+      let top, left;
+      if (target) {
+        const r = target.getBoundingClientRect();
+        top = r.bottom + 12;
+        left = r.left + r.width / 2 - cw / 2;
+        if (top + ch > window.innerHeight - 12) top = Math.max(12, r.top - ch - 12);
+      } else {
+        top = (window.innerHeight - ch) / 2;
+        left = (window.innerWidth - cw) / 2;
+      }
+      left = Math.min(Math.max(12, left), window.innerWidth - cw - 12);
+      top = Math.min(Math.max(12, top), window.innerHeight - ch - 12);
+      card.style.top = top + 'px'; card.style.left = left + 'px';
+      card.style.visibility = 'visible';
+    });
+  }
+  function render() {
+    const step = steps[i];
+    const target = step.sel ? document.querySelector(step.sel) : null;
+    if (target) {
+      const r = target.getBoundingClientRect(), pad = 4;
+      hl.style.display = 'block';
+      hl.style.top = (r.top - pad) + 'px'; hl.style.left = (r.left - pad) + 'px';
+      hl.style.width = (r.width + pad * 2) + 'px'; hl.style.height = (r.height + pad * 2) + 'px';
+      backdrop.style.background = 'transparent';
+    } else {
+      hl.style.display = 'none';
+      backdrop.style.background = 'rgba(0,0,0,0.72)';
+    }
+    card.innerHTML = `<h4>${step.title}</h4><p>${step.body}</p>
+      <div class="tour-nav">
+        <button class="tour-skip">Skip</button>
+        <div class="tour-dots">${steps.map((_, n) => `<span class="tour-dot ${n === i ? 'active' : ''}"></span>`).join('')}</div>
+        <button class="btn primary tour-go">${i === steps.length - 1 ? 'Got it' : 'Next'}</button>
+      </div>`;
+    card.querySelector('.tour-skip').onclick = end;
+    card.querySelector('.tour-go').onclick = next;
+    place(target);
+  }
+  document.body.append(backdrop, hl, card);
+  window.addEventListener('resize', render);
+  render();
+}
+
 window.addEventListener('load',()=>{
   loadQueueFromStorage();
   renderQueue();
   loadExcludePrefs();
   syncExcludeUI();
+  setTimeout(() => startTour(false), 650);
   const t = document.getElementById('token-input').value.trim();
   if (!t) return;
   const cache = loadCache();
