@@ -28,6 +28,25 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, format, *args):
         pass  # suppress request logs
 
+class Server(http.server.ThreadingHTTPServer):
+    # Threaded: each request gets its own thread. A single-threaded server's poll
+    # loop gets starved by the pystray tray message loop under pythonw and stops
+    # answering, so threading is required for the tray icon to coexist with serving.
+    daemon_threads = True
+    # Windows treats SO_REUSEADDR like SO_REUSEPORT, which lets a SECOND launch
+    # silently bind the same port and wedge both instances. Disable it so a
+    # duplicate launch fails cleanly instead (we handle that case in main()).
+    allow_reuse_address = False
+
+def already_running():
+    """True if something is already answering on PORT (an existing instance)."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(0.4)
+    try:
+        return s.connect_ex(("127.0.0.1", PORT)) == 0
+    finally:
+        s.close()
+
 def hide_console():
     if os.name == 'nt':
         hwnd = ctypes.windll.kernel32.GetConsoleWindow()
@@ -44,13 +63,26 @@ def main():
     os.chdir(DIR)
     ip = get_local_ip()
     url = f"http://{ip}:{PORT}"
+    local_url = f"http://localhost:{PORT}/plex_picker.html"
 
-    httpd = http.server.HTTPServer(("0.0.0.0", PORT), Handler)
+    # If an instance is already running, just reopen the app and exit — this
+    # makes the desktop shortcut safe to double-click without wedging the port.
+    if already_running():
+        webbrowser.open(local_url)
+        return
+
+    try:
+        httpd = Server(("0.0.0.0", PORT), Handler)
+    except OSError:
+        # Port busy but not answering (a stray/zombie bind) — open anyway and bail.
+        webbrowser.open(local_url)
+        return
+
     server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     server_thread.start()
 
     # Open the app in the default browser on launch (handy for the desktop shortcut)
-    threading.Timer(0.8, lambda: webbrowser.open(f"http://localhost:{PORT}/plex_picker.html")).start()
+    threading.Timer(0.8, lambda: webbrowser.open(local_url)).start()
 
     print("=" * 45)
     print("  Plex Picker is running!")
